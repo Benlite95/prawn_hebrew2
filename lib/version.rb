@@ -1,3 +1,3 @@
-﻿module PrawnHebrew
-  VERSION = "0.0.7"
+module PrawnHebrew
+  VERSION = "0.0.8"
 end
