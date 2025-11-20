@@ -18,40 +18,52 @@ module PrawnHebrew
 
     def hebrew_formatted_text(text, size: 12, style: :normal, hebrew_font: DEFAULT_HEBREW_FONT, english_font: DEFAULT_ENGLISH_FONT)
       text = sanitize_text(text)
-      words = text.to_s.split(/(\s+|\n)/)
-      hebrew_run = []
-      fragments = []
+      
+      # Split by newlines first to process each line independently
+      lines = text.to_s.split("\n")
+      all_fragments = []
       
       styles = style.is_a?(Array) ? style : [style].compact
-
-      words.each do |word|
-        if word.strip.empty?
-          fragments << { text: word, font: english_font, size: size, styles: styles } if word != ' '
-          next
-        end
-
-        if word =~ /\p{Hebrew}/
-          hebrew_run << word
-        else
-          unless hebrew_run.empty?
-            hebrew_run.reverse.each_with_index do |hw, idx|
-              fragments << { text: hw, font: hebrew_font, size: size, direction: :rtl, styles: styles }
-              fragments << { text: ' ', font: hebrew_font, size: size, direction: :rtl, styles: styles } if idx < hebrew_run.length - 1
-            end
-            fragments << { text: ' ' }
-            hebrew_run.clear
+      
+      lines.each_with_index do |line, line_idx|
+        words = line.split(/(\s+)/)
+        hebrew_run = []
+        
+        words.each do |word|
+          if word.strip.empty?
+            all_fragments << { text: word, font: english_font, size: size, styles: styles } if word != ' '
+            next
           end
-          fragments << { text: "#{word} ", font: english_font, size: size, styles: styles }
-        end
-      end
 
-      unless hebrew_run.empty?
-        hebrew_run.reverse.each_with_index do |hw, idx|
-          fragments << { text: hw, font: hebrew_font, size: size, direction: :rtl, styles: styles }
-          fragments << { text: ' ', font: hebrew_font, size: size, direction: :rtl, styles: styles } if idx < hebrew_run.length - 1
+          if word =~ /\p{Hebrew}/
+            hebrew_run << word
+          else
+            unless hebrew_run.empty?
+              hebrew_run.reverse.each_with_index do |hw, idx|
+                all_fragments << { text: hw, font: hebrew_font, size: size, direction: :rtl, styles: styles }
+                all_fragments << { text: ' ', font: hebrew_font, size: size, direction: :rtl, styles: styles } if idx < hebrew_run.length - 1
+              end
+              all_fragments << { text: ' ' }
+              hebrew_run.clear
+            end
+            all_fragments << { text: "#{word} ", font: english_font, size: size, styles: styles }
+          end
+        end
+
+        unless hebrew_run.empty?
+          hebrew_run.reverse.each_with_index do |hw, idx|
+            all_fragments << { text: hw, font: hebrew_font, size: size, direction: :rtl, styles: styles }
+            all_fragments << { text: ' ', font: hebrew_font, size: size, direction: :rtl, styles: styles } if idx < hebrew_run.length - 1
+          end
+        end
+        
+        # Add newline between lines (except after the last line)
+        if line_idx < lines.length - 1
+          all_fragments << { text: "\n", font: english_font, size: size, styles: styles }
         end
       end
-      fragments
+      
+      all_fragments
     end
 
     def hebrew_text_box(text, size: 12, style: :normal,
@@ -116,6 +128,7 @@ module PrawnHebrew
         # Add leading to box_opts if specified
         box_opts[:leading] = leading if leading > 0
         
+        # Don't set direction or alignment - let the reversed fragments handle it
         formatted_text_box(fragments, box_opts)
       end
     end
