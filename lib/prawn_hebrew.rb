@@ -8,12 +8,15 @@ module PrawnHebrew
     
     # Set to true for debugging which text rendering path is used
     DEBUG_MODE = false
-    INVISIBLE_CHARS = /[\u200B\u200C\u200D\u200E\u200F\uFEFF\u00AD\u202A\u202B\u202C\u202D\u202E]/.freeze
+    INVISIBLE_CHARS = /[\u2011\u2010\u2012\u2013\u2014\u2018\u2019\u201C\u201D\u2026\u200B\u200C\u200D\u200E\u200F\uFEFF\u00AD\u202A\u202B\u202C\u202D\u202E]/.freeze
     NBSP_CHARS = /[\u00A0\u202F]/.freeze
+
+
+
 
     def sanitize_text(text)
       return text if text.nil?
-      text.to_s.gsub(INVISIBLE_CHARS, '').gsub(NBSP_CHARS, ' ')
+      text.to_s.gsub(INVISIBLE_CHARS, ' ').gsub(NBSP_CHARS, ' ')
     end
 
     def hebrew_formatted_text(text, size: 12, style: :normal, hebrew_font: DEFAULT_HEBREW_FONT, english_font: DEFAULT_ENGLISH_FONT)
