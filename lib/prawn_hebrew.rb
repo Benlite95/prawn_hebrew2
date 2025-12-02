@@ -81,6 +81,8 @@ module PrawnHebrew
       rotation = box_opts.delete(:rotate) || 0
       char_spacing = box_opts.delete(:character_spacing) || 0
       leading = box_opts.delete(:leading) || 0
+      min_font_size = box_opts.delete(:min_font_size)
+      overflow = box_opts[:overflow]
       
       # Check if text contains Hebrew characters
       contains_hebrew = text.to_s =~ /\p{Hebrew}/
@@ -90,21 +92,38 @@ module PrawnHebrew
         direction = contains_hebrew ? :rtl : :ltr
       end
       
-      # For completely English text (no Hebrew characters and LTR direction), 
-      # use standard Prawn text_box for better performance and compatibility
-      if !contains_hebrew && direction == :ltr
-        render_english_only_text(text, final_size, style, final_english_font, 
-                                 rotation, char_spacing, leading, box_opts)
+      # Handle shrink_to_fit behavior
+      if overflow == :shrink_to_fit
+        box_opts.delete(:overflow)
+        
+        if !contains_hebrew && direction == :ltr
+          # English-only: use Prawn's built-in shrink_to_fit
+          box_opts[:overflow] = :shrink_to_fit
+          box_opts[:min_font_size] = min_font_size if min_font_size
+          render_english_only_text(text, final_size, style, final_english_font, 
+                                   rotation, char_spacing, leading, box_opts)
+        else
+          # Hebrew/mixed: implement shrinking manually
+          shrink_hebrew_text_to_fit(text, final_size, style, final_hebrew_font, 
+                                    final_english_font, char_spacing, leading, 
+                                    min_font_size, rotation, box_opts)
+        end
       else
-        # For Hebrew text or RTL direction, use formatted text approach
-        if rotation != 0
-          rotate(rotation, origin: box_opts[:at] || [0, 0]) do
+        # Normal rendering without shrinking
+        if !contains_hebrew && direction == :ltr
+          render_english_only_text(text, final_size, style, final_english_font, 
+                                   rotation, char_spacing, leading, box_opts)
+        else
+          # For Hebrew text or RTL direction, use formatted text approach
+          if rotation != 0
+            rotate(rotation, origin: box_opts[:at] || [0, 0]) do
+              render_hebrew_text_content(text, contains_hebrew, direction, final_size, style, 
+                                 final_hebrew_font, final_english_font, char_spacing, leading, box_opts)
+            end
+          else
             render_hebrew_text_content(text, contains_hebrew, direction, final_size, style, 
                                final_hebrew_font, final_english_font, char_spacing, leading, box_opts)
           end
-        else
-          render_hebrew_text_content(text, contains_hebrew, direction, final_size, style, 
-                             final_hebrew_font, final_english_font, char_spacing, leading, box_opts)
         end
       end
     end
@@ -133,6 +152,73 @@ module PrawnHebrew
         
         # Don't set direction or alignment - let the reversed fragments handle it
         formatted_text_box(fragments, box_opts)
+      end
+    end
+    
+    # Shrink Hebrew text to fit in the box by reducing font size
+    def shrink_hebrew_text_to_fit(text, initial_size, style, hebrew_font, english_font, 
+                                   char_spacing, leading, min_font_size, rotation, box_opts)
+      min_size = min_font_size || 5
+      current_size = initial_size
+      
+      # Try rendering with progressively smaller font sizes until it fits
+      while current_size >= min_size
+        # Create a copy of box_opts to test rendering
+        test_opts = box_opts.dup
+        
+        # Try rendering at current size
+        fragments = hebrew_formatted_text(text, size: current_size, style: style,
+                                          hebrew_font: hebrew_font,
+                                          english_font: english_font)
+        
+        test_opts[:leading] = leading if leading > 0
+        
+        # Test if it fits by attempting to render
+        success = character_spacing(char_spacing) do
+          if rotation != 0
+            rotate(rotation, origin: test_opts[:at] || [0, 0]) do
+              result = formatted_text_box(fragments, test_opts.merge(dry_run: true))
+              result.empty? || result == ""
+            end
+          else
+            result = formatted_text_box(fragments, test_opts.merge(dry_run: true))
+            result.empty? || result == ""
+          end
+        end
+        
+        # If it fits, render it for real and return
+        if success
+          character_spacing(char_spacing) do
+            if rotation != 0
+              rotate(rotation, origin: box_opts[:at] || [0, 0]) do
+                formatted_text_box(fragments, box_opts.merge(leading: leading > 0 ? leading : nil).compact)
+              end
+            else
+              formatted_text_box(fragments, box_opts.merge(leading: leading > 0 ? leading : nil).compact)
+            end
+          end
+          return
+        end
+        
+        # Reduce font size and try again
+        current_size -= 0.5
+      end
+      
+      # If we've reached min size, render at min size anyway
+      fragments = hebrew_formatted_text(text, size: min_size, style: style,
+                                        hebrew_font: hebrew_font,
+                                        english_font: english_font)
+      
+      box_opts[:leading] = leading if leading > 0
+      
+      character_spacing(char_spacing) do
+        if rotation != 0
+          rotate(rotation, origin: box_opts[:at] || [0, 0]) do
+            formatted_text_box(fragments, box_opts)
+          end
+        else
+          formatted_text_box(fragments, box_opts)
+        end
       end
     end
   end
