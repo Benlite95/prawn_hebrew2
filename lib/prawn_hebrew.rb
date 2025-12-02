@@ -182,8 +182,8 @@ module PrawnHebrew
           end
         end
         
-        # If overflow_text is empty or nil, the text fits
-        if overflow_text.nil? || overflow_text.empty? || overflow_text == ""
+        # formatted_text_box returns an array when there's overflow, empty array when it fits
+        if overflow_text.is_a?(Array) && overflow_text.empty?
           fitting_size = current_size
           break
         end
