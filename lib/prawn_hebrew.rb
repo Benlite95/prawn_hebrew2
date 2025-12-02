@@ -159,43 +159,53 @@ module PrawnHebrew
     def shrink_hebrew_text_to_fit(text, initial_size, style, hebrew_font, english_font, 
                                    char_spacing, leading, min_font_size, rotation, box_opts)
       min_size = min_font_size || 5
+      
+      # Get box dimensions
+      box_width = box_opts[:width]
+      box_height = box_opts[:height]
+      
+      return render_hebrew_text_content(text, true, :rtl, initial_size, style, 
+                                       hebrew_font, english_font, char_spacing, leading, box_opts) unless box_width && box_height
+      
       current_size = initial_size
       fitting_size = nil
       
-      # Find the largest font size that fits by testing with dry_run
+      # Try progressively smaller sizes
       while current_size >= min_size
-        fragments = hebrew_formatted_text(text, size: current_size, style: style,
-                                          hebrew_font: hebrew_font,
-                                          english_font: english_font)
+        # Calculate approximate text dimensions at this size
+        test_fragments = hebrew_formatted_text(text, size: current_size, style: style,
+                                               hebrew_font: hebrew_font,
+                                               english_font: english_font)
         
-        test_opts = box_opts.dup
-        test_opts[:leading] = leading if leading > 0
+        # Calculate total text width by measuring each fragment
+        total_width = 0
+        total_height = current_size * 1.2 # Approximate line height
         
-        # Test if it fits without actually rendering
-        overflow_text = character_spacing(char_spacing) do
-          if rotation != 0
-            rotate(rotation, origin: test_opts[:at] || [0, 0]) do
-              formatted_text_box(fragments, test_opts.merge(dry_run: true))
-            end
-          else
-            formatted_text_box(fragments, test_opts.merge(dry_run: true))
+        test_fragments.each do |fragment|
+          next if fragment[:text] == "\n"
+          fragment_font = fragment[:font] || hebrew_font
+          font(fragment_font) do
+            total_width += width_of(fragment[:text], size: current_size)
           end
         end
         
-        # formatted_text_box returns an array when there's overflow, empty array when it fits
-        if overflow_text.is_a?(Array) && overflow_text.empty?
+        # Count newlines to estimate height
+        line_count = text.count("\n") + 1
+        total_height = (current_size * 1.2 * line_count) + (leading * (line_count - 1))
+        
+        # Check if it would fit (with some padding)
+        if total_width <= (box_width * 0.95) && total_height <= (box_height * 0.95)
           fitting_size = current_size
           break
         end
         
-        # Reduce font size and try again
         current_size -= 0.5
       end
       
       # Use the fitting size, or min_size if nothing fit
       final_size = fitting_size || min_size
       
-      # Now render once with the final size
+      # Render with the final size
       fragments = hebrew_formatted_text(text, size: final_size, style: style,
                                         hebrew_font: hebrew_font,
                                         english_font: english_font)
