@@ -160,64 +160,56 @@ module PrawnHebrew
                                    char_spacing, leading, min_font_size, rotation, box_opts)
       min_size = min_font_size || 5
       current_size = initial_size
+      fitting_size = nil
       
-      # Try rendering with progressively smaller font sizes until it fits
+      # Find the largest font size that fits by testing with dry_run
       while current_size >= min_size
-        # Create a copy of box_opts to test rendering
-        test_opts = box_opts.dup
-        
-        # Try rendering at current size
         fragments = hebrew_formatted_text(text, size: current_size, style: style,
                                           hebrew_font: hebrew_font,
                                           english_font: english_font)
         
+        test_opts = box_opts.dup
         test_opts[:leading] = leading if leading > 0
         
-        # Test if it fits by attempting to render
-        success = character_spacing(char_spacing) do
+        # Test if it fits without actually rendering
+        overflow_text = character_spacing(char_spacing) do
           if rotation != 0
             rotate(rotation, origin: test_opts[:at] || [0, 0]) do
-              result = formatted_text_box(fragments, test_opts.merge(dry_run: true))
-              result.empty? || result == ""
+              formatted_text_box(fragments, test_opts.merge(dry_run: true))
             end
           else
-            result = formatted_text_box(fragments, test_opts.merge(dry_run: true))
-            result.empty? || result == ""
+            formatted_text_box(fragments, test_opts.merge(dry_run: true))
           end
         end
         
-        # If it fits, render it for real and return
-        if success
-          character_spacing(char_spacing) do
-            if rotation != 0
-              rotate(rotation, origin: box_opts[:at] || [0, 0]) do
-                formatted_text_box(fragments, box_opts.merge(leading: leading > 0 ? leading : nil).compact)
-              end
-            else
-              formatted_text_box(fragments, box_opts.merge(leading: leading > 0 ? leading : nil).compact)
-            end
-          end
-          return
+        # If overflow_text is empty or nil, the text fits
+        if overflow_text.nil? || overflow_text.empty? || overflow_text == ""
+          fitting_size = current_size
+          break
         end
         
         # Reduce font size and try again
         current_size -= 0.5
       end
       
-      # If we've reached min size, render at min size anyway
-      fragments = hebrew_formatted_text(text, size: min_size, style: style,
+      # Use the fitting size, or min_size if nothing fit
+      final_size = fitting_size || min_size
+      
+      # Now render once with the final size
+      fragments = hebrew_formatted_text(text, size: final_size, style: style,
                                         hebrew_font: hebrew_font,
                                         english_font: english_font)
       
-      box_opts[:leading] = leading if leading > 0
+      render_opts = box_opts.dup
+      render_opts[:leading] = leading if leading > 0
       
       character_spacing(char_spacing) do
         if rotation != 0
-          rotate(rotation, origin: box_opts[:at] || [0, 0]) do
-            formatted_text_box(fragments, box_opts)
+          rotate(rotation, origin: render_opts[:at] || [0, 0]) do
+            formatted_text_box(fragments, render_opts)
           end
         else
-          formatted_text_box(fragments, box_opts)
+          formatted_text_box(fragments, render_opts)
         end
       end
     end
