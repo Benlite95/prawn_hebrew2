@@ -79,6 +79,15 @@ module PrawnHebrew
     def hebrew_formatted_text(text, size: 12, style: :normal, hebrew_font: DEFAULT_HEBREW_FONT, english_font: DEFAULT_ENGLISH_FONT)
       text = sanitize_text(text)
       
+      # Check if text is pure Hebrew (no English characters)
+      is_pure_hebrew = text.to_s =~ /\p{Hebrew}/ && text.to_s !~ /[a-zA-Z]/
+      
+      # If pure Hebrew, render it directly without word reversal
+      if is_pure_hebrew
+        return render_pure_hebrew(text, size, style, hebrew_font)
+      end
+      
+      # Otherwise, use the mixed text logic with word reversal
       # Split by newlines first to process each line independently
       lines = text.to_s.split("\n")
       all_fragments = []
@@ -116,6 +125,26 @@ module PrawnHebrew
         # Add newline between lines (except after the last line)
         if line_idx < lines.length - 1
           all_fragments << { text: "\n", font: english_font, size: size, styles: styles }
+        end
+      end
+      
+      all_fragments
+    end
+    
+    # Render pure Hebrew text as RTL without word reversal
+    def render_pure_hebrew(text, size, style, hebrew_font)
+      lines = text.to_s.split("\n")
+      all_fragments = []
+      
+      styles = style.is_a?(Array) ? style : [style].compact
+      
+      lines.each_with_index do |line, line_idx|
+        # For pure Hebrew, just add the line as-is with RTL direction
+        all_fragments << { text: line, font: hebrew_font, size: size, direction: :rtl, styles: styles }
+        
+        # Add newline between lines (except after the last line)
+        if line_idx < lines.length - 1
+          all_fragments << { text: "\n", font: hebrew_font, size: size, direction: :rtl, styles: styles }
         end
       end
       
@@ -168,7 +197,18 @@ module PrawnHebrew
       # Process each row: sanitize and render Hebrew cells using formatted text
       processed_data = data.map do |row|
         row.map do |cell_content|
-          sanitize_text(cell_content.to_s)
+          # Handle hash cells (e.g., {content: "text", font_style: :bold})
+          if cell_content.is_a?(Hash)
+            cell_hash = cell_content.dup
+            # Sanitize the content if it exists
+            if cell_hash[:content]
+              cell_hash[:content] = sanitize_text(cell_hash[:content].to_s)
+            end
+            cell_hash
+          else
+            # Handle simple string cells
+            sanitize_text(cell_content.to_s)
+          end
         end
       end
       
@@ -180,12 +220,12 @@ module PrawnHebrew
           if cell_text =~ /\p{Hebrew}/
             # Use text_color and font to support Hebrew
             cell.font = hebrew_font
-            cell.size = size
+            cell.size = size unless cell.size  # Don't override if already set
             cell.text_color = table_opts[:text_color] || "000000"
           else
             # English cells
             cell.font = english_font
-            cell.size = size
+            cell.size = size unless cell.size  # Don't override if already set
           end
         end
       end
